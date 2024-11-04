@@ -1,4 +1,6 @@
+.DS_Store
+/.idea/
+/volumes/
+docker-compose.yml.bak
 variants
 variants.tar
-.DS_Store
-docker-compose.yml.bak
