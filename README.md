@@ -1,24 +1,24 @@
 # samba - (ghcr.io/servercontainers/samba) [x86 + arm]
 
-samba on alpine
+Samba on Alpine Linux and Ubuntu Linux. You can use Active Directory on Ubuntu only.
 
 with timemachine, zeroconf (`avahi`) and WSD (Web Services for Devices) (`wsdd2`) support.
 
-Note that there are issues regarding UID/GID Mapping on Docker Desktop - see: https://github.com/ServerContainers/samba/issues/125
+Note that there are issues regarding UID/GID Mapping on Docker Desktop, see: https://github.com/ServerContainers/samba/issues/125
 
 ## IMPORTANT!
 
 __New Registry:__ `ghcr.io/servercontainers/samba`
 
-In March 2023 - Docker informed me that they are going to remove my 
-organizations `servercontainers` and `desktopcontainers` unless 
+In March 2023 - Docker informed me that they are going to remove my
+organizations `servercontainers` and `desktopcontainers` unless
 I'm upgrading to a pro plan.
 
-I'm not going to do that. It's more of a professionally done hobby then a
+I'm not going to do that. It's more of a professionally done hobby than a
 professional job I'm earning money with.
 
-In order to avoid bad actors taking over my org. names and publishing potenial
-backdoored containers, I'd recommend to switch over to my new github registry: `ghcr.io/servercontainers`.
+In order to avoid bad actors taking over my org. names and publishing potential
+backdoored containers, I'd recommend to switch over to my new GitHub Container Registry: `ghcr.io/servercontainers`.
 
 ## Build & Variants
 
@@ -30,17 +30,17 @@ This way you can pin your installation/configuration to a certain version. or ea
 
 To build a `latest` tag run `./build.sh release`
 
-For builds without specified registry you can use the `generate-variants.sh` script to generate 
+For builds without a specified registry you can use the `generate-variants.sh` script to generate
 variations of this container and build the repos yourself.
 
-_all of those variants are automatically build and generated in one go_
+_all of those variants are automatically built and generated in one go_
 
 - `latest` or `a<alpine version>-s<samba version>`
     - main version of this repo
     - includes everything (smbd, avahi, wsdd2)
     - not all services need to start/run -> use ENV variables to disable optional services
 - `smbd-only-latest` or `smbd-only-a<alpine version>-s<samba version>`
-    - this will only include smbd and my scripts - no avahi, wsdd2 installed
+    - this will only include smbd and my scripts, no avahi, wsdd2 installed
 - `smbd-avahi-latest` or `smbd-avahi-a<alpine version>-s<samba version>`
     - this will only include smbd, my scripts and avahi
     - optional service can still be disabled using ENV variables
@@ -55,12 +55,12 @@ _all of those variants are automatically build and generated in one go_
         * `mangled names = no; dos charset = CP850; unix charset = UTF-8`
     * added new environment variable to `FAIL_FAST` on user/group creation/errors/conflicts (#139)
 * 2024-07-05
-    * improved github workflow - don't fail if it just skipped the build.
+    * improved GitHub Workflow - don't fail if it just skipped the build.
     * sign images with cosign
 * 2024-05-27
     * added `.dockerignore` to exlcude unnecessary files and history
 * 2024-05-23
-    * updated github actions (see pull #131)
+    * updated GitHub actions (see pull #131)
     * fixed broken build/version
 * 2024-04-16
     * added `tzdata` package to support setting the timezone using an env
@@ -86,13 +86,13 @@ _all of those variants are automatically build and generated in one go_
 * 2023-09-24
     * added `nmbd` service and increase compatibility
     * print `smb.conf` on initialization to make `testparm -s` problems visible
-    * updated github build to fail if build/version combination already exists as tag
+    * updated GitHub build to fail if build/version combination already exists as tag
 * 2023-09-16
     * implemented working version of pull #87
     * fixed avahi model which now works without a single timemachine share
     * avahi will now be configured without timemachine
 * 2023-08-07
-    * create all groups, than create all users, and after that add users to groups - this gives a more clear and clean way to add users to different groups
+    * create all groups, then create all users, and after that add users to groups - this gives a more clear and clean way to add users to different groups
 * 2023-07-29
     * added `vfs objects = catia fruit streams_xattr` to global config to improve macos compatibility - closes issue #93
 
@@ -124,6 +124,8 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
         * e.g. `foo_SPACE_bar`
     * important if the SAMBA key contains a `:` space replace it with `_COLON_`
         * e.g. `foo_COLON_bar`
+    * important if the SAMBA key contains a `*` space replace it with `_ASTERISK_`
+        * e.g. `foo_ASTERISK_bar`
 
 * __ACCOUNT\_username__
     * multiple variables/accounts possible
@@ -162,7 +164,8 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
 
 * __FAIL\_FAST__
     * _optional_ currently only fails fast if there are conflicts/errors during user/group creation
-    * default not set - set to any value to enable
+    * default not set on Alpine Linux - set to any value to enable
+    * ignored on Ubuntu - it is always enabled
 
 * __AVAHI\_NAME__
     * _optional_ name of avahi samba service
@@ -222,7 +225,7 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
     * when mounted, the internal avahi daemon will be disabled
 
 
-## Some helpful indepth informations about TimeMachine and Avahi / Zeroconf 
+## Some helpful in-depth information about TimeMachine and Avahi / Zeroconf
 
 ### General Infos
 
@@ -248,8 +251,8 @@ After that just add a new service which fits to your config.
 
 If you have a more sophisticated network setup (vpn, different networks etc.) you might want to avoid using zeroconfig + avahi in combination with TimeMachine.
 
-Zeroconf limits you to the autodiscovered mdns names (`$AVAHI_NAME` + `.local`). So whenever your mac can't pic up this zeroconf configuration TimeMachine will not backup your machine.
-This is not bad in a normal guy's personal homenetwork. Here it would backup everytime the user is at home and has all devices (and his backup nas) in one LAN.
+Zeroconf limits you to the autodiscovered mdns names (`$AVAHI_NAME` + `.local`). So whenever your mac can't pick up this zeroconf configuration TimeMachine will not backup your machine.
+This is not bad in a normal guy's personal homenetwork. Here it would back up everytime the user is at home and has all devices (and his backup nas) in one LAN.
 
 To overcome this issue, I'd suggest to connect your NAS/Samba Server manually using `Finder` -> Go -> Connect to Server (or shortcut `⌘k`).
 Enter the FQDN or IP of the server and the path to your timemachine share you want to connect to and establish the connection.
