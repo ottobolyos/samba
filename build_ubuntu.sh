@@ -156,6 +156,6 @@ done
 dangling_images="$(docker images -f 'dangling=true' -q)"
 
 if [ "$dangling_images" != '' ]; then
-  # shellcheck disable=SC2086 # Double quote to prevent globbing and word splitting
+  # shellcheck disable=SC2086 # Intentional word splitting for multiple image IDs
   docker rmi -f $dangling_images
 fi

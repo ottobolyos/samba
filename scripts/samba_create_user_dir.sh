@@ -7,8 +7,8 @@ user="${2-}"
 
 if [ ! -e "$folder/$user" ]; then
   mkdir -p "$folder/$user"
-  chown "$user:$(id -g "$user")" "$user/$folder"
-  chmod -R 700 "$user/$folder"
+  chown "$user:$(id -g "$user")" "$folder/$user"
+  chmod -R 700 "$folder/$user"
 fi
 
 exit 0

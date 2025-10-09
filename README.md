@@ -224,6 +224,19 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
     * the container now maintains the service file `samba.service` for you - __it will be overwritten!__
     * when mounted, the internal avahi daemon will be disabled
 
+### Active Directory
+
+* __AD\_ADMIN\_USER__
+    * username of an AD administrator
+    * it is required when AD is installed and `AD_DISABLE` is not defined
+
+* __AD\_ADMIN\_PASS__
+    * password of an AD administrator
+    * it is required when AD is installed and `AD_DISABLE` is not defined
+
+* __SAMBA\_GLOBAL\_CONFIG\_realm__
+    * Kerberos realm name, usually it is same as the AD domain but in all capitals
+    * it is required when AD is installed and `AD_DISABLE` is not defined
 
 ## Some helpful in-depth information about TimeMachine and Avahi / Zeroconf
 
@@ -231,7 +244,7 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
 
 - Samba
     - https://github.com/willtho89/docker-samba-timemachine/
-    - https://github.com/sp00ls/SambaConfigs very interessting multi user timemachine setup
+    - https://github.com/sp00ls/SambaConfigs: very interesting multi-user TimeMachine setup
     - https://wiki.samba.org/index.php/Configure_Samba_to_Work_Better_with_Mac_OS_X
     - https://serverfault.com/questions/1010822/samba4-issues-with-time-machine-cannot-create-new-backup-on-samba-share
 

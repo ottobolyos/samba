@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 
-# Dependencies [WIP list]:
-# - Bash;
-# - GNU `grep`;
-# - GNU `sed`;
-# - `samba`;
-# - `coreutils` (for `env`);
-# - `shadow-utils`/`shadow` (for `groupadd`);
+# Dependencies:
+# - bash
+# - coreutils (cat, env)
+# - grep
+# - sed
+# - samba (smbpasswd, testparm, net)
+# - shadow (groupadd, useradd, usermod)
+# - passwd
+# - realmd (realm) [AD only]
+# - winbind [AD only]
+# - avahi-daemon [if AVAHI_INSTALL=true]
 
 # Exit codes:
 # 0 - Success
@@ -176,7 +180,7 @@ if [ ! -f "$INITALIZED" ]; then
   ##
   # Active Directory configuration
   ##
-  if [ "${AD_INSTALL-}" = 'true' ] && [ -n "${AD_DISABLE-}" ]; then
+  if [ "${AD_INSTALL-}" = 'true' ] && [ "${AD_DISABLE-}" != 'true' ]; then
     echo '>> AD: Starting configuration ...'
 
     # Check whether the required variables are defined
@@ -196,7 +200,13 @@ if [ ! -f "$INITALIZED" ]; then
 
     # Join the realm
     # Note: When we have already joined the realm, the exit code is `1`, there we had to use `|| true`.
+    # FIXME: Test whether we have joined the realm like this, as the current way does not work always.
     echo ">> AD: Joining the \`${SAMBA_GLOBAL_CONFIG_realm-}\` realm ..."
+    if ! realm_join_result="$(realm --install / join "${SAMBA_GLOBAL_CONFIG_realm-}" -U "${AD_ADMIN_USER-}" <<< "${AD_ADMIN_PASS-}")"; then
+      if [ "$realm_join_result" = 'Already joined.' ]; then
+        :
+      fi
+    fi
     realm --install / join "${SAMBA_GLOBAL_CONFIG_realm-}" -U "${AD_ADMIN_USER-}" <<< "${AD_ADMIN_PASS-}" || true
 
     # Check whether we have successfully joined the realm
@@ -213,6 +223,7 @@ if [ ! -f "$INITALIZED" ]; then
     # pam-auth-update --enable mkhomedir
 
     # Join the domain
+    # FIXME: Check this command if it fails. This does not work as expected.
     echo ">> AD: Joining the \`${SAMBA_GLOBAL_CONFIG_realm,,}\` domain ..."
     net ads join -U"${AD_ADMIN_USER-}%${AD_ADMIN_PASS-}"
 
