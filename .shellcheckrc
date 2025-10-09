@@ -1,0 +1,7 @@
+# ShellCheck configuration
+# Prefer single quotes where possible
+quote-safe-variables=true
+source-path=SCRIPTDIR
+
+# Additional checks
+enable=all

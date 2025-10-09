@@ -1,0 +1,60 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use.py",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/sessions-enforce.py",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit|Task|Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/task-transcript-link.py",
+            "type": "command"
+          }
+        ],
+        "matcher": "Task"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.py",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|clear"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/user-messages.py",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "command": "python3 $CLAUDE_PROJECT_DIR/.claude/statusline-script.py",
+    "padding": 0,
+    "type": "command"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "api_mode": false,
+  "blocked_tools": [
+    "Edit",
+    "MultiEdit",
+    "NotebookEdit",
+    "Write"
+  ],
+  "branch_enforcement": {
+    "enabled": true
+  },
+  "developer_name": "ts",
+  "task_detection": {
+    "enabled": true
+  },
+  "trigger_phrases": [
+    "do it",
+    "go ahead",
+    "implement it",
+    "make it so",
+    "run that",
+    "yert"
+  ]
+}

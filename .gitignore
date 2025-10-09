@@ -3,4 +3,9 @@
 /volumes/
 docker-compose.yml.bak
 variants
-variants.tar
+variants.tar/.claude/hooks/__pycache__/
+/.claude/settings.local.json
+/.claude/state/
+/sessions/tasks/
+
+!/sessions/tasks/TEMPLATE.md

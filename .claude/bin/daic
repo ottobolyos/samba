@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+DAIC command to toggle between Discussion and Implementation modes.
+
+This is a shell-agnostic Python implementation that works on all platforms
+where Python3 is available (Windows, macOS, Linux).
+"""
+import sys
+import os
+from pathlib import Path
+
+def find_project_root():
+    """Find project root by looking for .claude directory."""
+    current = Path.cwd()
+    while current.parent != current:
+        if (current / ".claude").exists():
+            return current
+        current = current.parent
+    return None
+
+def main():
+    # Find project root with .claude directory
+    project_root = find_project_root()
+
+    if not project_root:
+        print("[DAIC Error] Could not find .claude directory in current path or parent directories")
+        sys.exit(1)
+
+    # Add hooks directory to Python path
+    hooks_dir = project_root / ".claude" / "hooks"
+    sys.path.insert(0, str(hooks_dir))
+
+    try:
+        # Import and call toggle function
+        from shared_state import toggle_daic_mode
+        mode = toggle_daic_mode()
+        print(f'[DAIC] {mode}')
+    except ImportError as e:
+        print(f"[DAIC Error] Could not import shared_state module: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"[DAIC Error] {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
