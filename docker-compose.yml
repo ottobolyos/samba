@@ -25,6 +25,11 @@ services:
       #AVAHI_DISABLE: 1
       #NETBIOS_DISABLE: 1
 
+      # Optional: Register host machine's hostname in AD DNS instead of container
+      # Useful when running Samba on a NAS that needs to register its own hostname
+      #HOST_IP: "192.168.1.10"
+      #HOST_HOSTNAME: "nas.example.com"
+
       GROUP_family: 1500
 
       ACCOUNT_alice: alipass

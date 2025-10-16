@@ -16,17 +16,25 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
 - `generate-variants.sh` - Generates variant configurations
 - `get-version.sh` - Retrieves version information
 
+### Runtime Scripts
+- `scripts/entrypoint_ubuntu.sh` - Ubuntu container entrypoint
+  - User/group creation (lines 118-176)
+  - Active Directory configuration (lines 183-255)
+  - AD DNS registration with host override support (lines 236-252)
+  - Avahi/zeroconf setup (lines 258-312)
+  - Samba volume configuration (lines 315-405)
+
 ### Docker Configuration
 - `ubuntu.dockerfile` - Ubuntu-based Dockerfile
 - `Dockerfile` - Alpine-based Dockerfile
-- `docker-compose.yml` - Example composition with user accounts
+- `docker-compose.yml:28-31` - Example composition with HOST_IP/HOST_HOSTNAME example
 
 ### Configuration
 - `config/` - Runtime configuration templates
 - `smb.conf` - Samba configuration template
 
 ### Documentation
-- `README.md` - User-facing documentation with environment variables
+- `README.md:241-251` - Environment variables including HOST_IP and HOST_HOSTNAME
 - `TROUBLESHOOTING.md` - Common issues and solutions
 - `CHANGELOGS.md` - Historical changes
 
@@ -63,6 +71,28 @@ Reference: `build_ubuntu.sh:29-40`
 ## Required Environment
 
 - `DOCKER_REGISTRY` - Registry and organization (e.g., 'ghcr.io/servercontainers')
+
+## Active Directory Features
+
+### DNS Registration
+
+Reference: `scripts/entrypoint_ubuntu.sh:236-252`
+
+The container supports two modes for Active Directory DNS registration:
+
+**Container DNS Registration (default):**
+- Registers container's own hostname and IP in AD DNS
+- Used when HOST_IP and HOST_HOSTNAME are not set
+- Command: `net ads dns register`
+
+**Host DNS Registration (optional):**
+- Registers Docker host's hostname and IP in AD DNS instead
+- Enabled by setting both HOST_IP and HOST_HOSTNAME environment variables
+- Useful for NAS devices running Samba in containers
+- Command: `net ads dns register "$HOST_HOSTNAME" "$HOST_IP"`
+- Warning issued if only one variable is set
+
+Configuration examples in README.md and docker-compose.yml
 
 ## Testing
 

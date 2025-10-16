@@ -238,6 +238,18 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
     * Kerberos realm name, usually it is same as the AD domain but in all capitals
     * it is required when AD is installed and `AD_DISABLE` is not defined
 
+* __HOST\_IP__
+    * _optional_ (AD only)
+    * IP address to register in AD DNS for the host machine
+    * Must be used together with `HOST_HOSTNAME`
+    * When both are set, the container registers the host's hostname/IP instead of its own
+
+* __HOST\_HOSTNAME__
+    * _optional_ (AD only)
+    * Hostname to register in AD DNS for the host machine
+    * Must be used together with `HOST_IP`
+    * When both are set, the container registers the host's hostname/IP instead of its own
+
 ## Some helpful in-depth information about TimeMachine and Avahi / Zeroconf
 
 ### General Infos

@@ -19,7 +19,7 @@
 # 3 - AD only: Failed to discover realm
 # 4 - AD only: Failed to join realm
 # 5 - AD only: Failed to join domain
-# 6 - AD only: Failed to register DNS entry for the container to Active Directory
+# 6 - AD only: Failed to register DNS entry to Active Directory
 
 set -euo pipefail
 
@@ -233,10 +233,22 @@ if [ ! -f "$INITALIZED" ]; then
       exit 5
     fi
 
-    # Register a DNS entry for the container
-    if ! net ads dns register -U"${AD_ADMIN_USER-}%${AD_ADMIN_PASS-}"; then
-      echo "ERROR: AD: Failed to register DNS entry for the container to Active Directory." 1>&2
-      exit 6
+    # Register a DNS entry for the container (or host if HOST_IP/HOST_HOSTNAME are set)
+    if [ -n "${HOST_IP-}" ] && [ -n "${HOST_HOSTNAME-}" ]; then
+      echo ">> AD: Registering host DNS entry: ${HOST_HOSTNAME-} -> ${HOST_IP-}"
+      if ! net ads dns register "${HOST_HOSTNAME-}" "${HOST_IP-}" -U"${AD_ADMIN_USER-}%${AD_ADMIN_PASS-}"; then
+        echo "ERROR: AD: Failed to register DNS entry for host (${HOST_HOSTNAME-} -> ${HOST_IP-}) to Active Directory." 1>&2
+        exit 6
+      fi
+    else
+      if [ -n "${HOST_IP-}" ] || [ -n "${HOST_HOSTNAME-}" ]; then
+        echo "WARNING: AD: HOST_IP and HOST_HOSTNAME must both be set or both be unset. Falling back to container DNS registration." 1>&2
+      fi
+      echo ">> AD: Registering container DNS entry"
+      if ! net ads dns register -U"${AD_ADMIN_USER-}%${AD_ADMIN_PASS-}"; then
+        echo "ERROR: AD: Failed to register DNS entry for the container to Active Directory." 1>&2
+        exit 6
+      fi
     fi
 
     echo '>> AD: successfully configured'
