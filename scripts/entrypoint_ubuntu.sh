@@ -58,6 +58,9 @@ if [ ! -f "$INITALIZED" ]; then
   # Copy the main Samba configuration file
   cp /container/config/samba/smb.conf /etc/samba/smb.conf
 
+  # Create empty lmhosts file to suppress warning
+  touch /etc/samba/lmhosts
+
   ##
   # MAIN CONFIGURATION
   ##
@@ -294,7 +297,7 @@ if [ ! -f "$INITALIZED" ]; then
       continue
     fi
 
-    VOL_PATH="$(grep -Po '^path *= *\K.*$' <<< "$CONF_PARSED")"
+    VOL_PATH="$(grep -Po "^path *= *\K[\"']?\K[^\"']*" <<< "$CONF_PARSED")"
 
     # Check if `$VOL_PATH` is an existing folder, else log a warning and continue with the next loop
     if [ -z "$VOL_PATH" ] || [ ! -d "$VOL_PATH" ]; then
