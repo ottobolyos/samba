@@ -1,6 +1,78 @@
-# CLAUDE.sessions.md
+# ServerContainers/Samba CLAUDE.md
 
-This file provides collaborative guidance and philosophy when using the Claude Code Sessions system.
+## Repository Purpose
+
+Docker container for Samba server with support for Active Directory, Avahi (zeroconf), and WSDD2 (Windows network discovery). Provides multi-architecture builds for x86_64, arm64, and arm platforms on both Alpine and Ubuntu base images.
+
+## Key Files
+
+### Build Scripts
+- `build_ubuntu.sh:1-209` - Ubuntu image builder with multi-variant support
+  - Supports help via `-h` or `--help` flags (lines 59-65)
+  - Help function at lines 20-55
+  - Builds 5 image variants: ad, avahi, full, only, wsdd2
+  - Multi-platform builds: linux/amd64, linux/arm/v7, linux/arm/v8, linux/arm64
+- `build.sh` - Alpine image builder
+- `generate-variants.sh` - Generates variant configurations
+- `get-version.sh` - Retrieves version information
+
+### Docker Configuration
+- `ubuntu.dockerfile` - Ubuntu-based Dockerfile
+- `Dockerfile` - Alpine-based Dockerfile
+- `docker-compose.yml` - Example composition with user accounts
+
+### Configuration
+- `config/` - Runtime configuration templates
+- `smb.conf` - Samba configuration template
+
+### Documentation
+- `README.md` - User-facing documentation with environment variables
+- `TROUBLESHOOTING.md` - Common issues and solutions
+- `CHANGELOGS.md` - Historical changes
+
+## Build Workflow
+
+Reference: `build_ubuntu.sh:69-209`
+
+1. Detect Samba and Ubuntu versions from base image
+2. Create version tag: `u<ubuntu-version>-s<samba-version>`
+3. Setup buildx with QEMU for multi-arch
+4. Build selected variants with appropriate feature flags
+5. Push to registry (unless `no-push` specified)
+6. Cleanup dangling images and builder instance
+
+## Image Variants
+
+Configuration arrays: `build_ubuntu.sh:149-158`
+
+- `ad` - Active Directory support only
+- `avahi` - Zeroconf/Bonjour support only
+- `full` - All features enabled (default)
+- `only` - Minimal smbd-only build
+- `wsdd2` - Windows Service Discovery only
+
+## Build Script Options
+
+Reference: `build_ubuntu.sh:29-40`
+
+- `force` - Build regardless of commit age
+- `no-push` - Local build without registry push
+- `plain-log` - Plain format build progress
+- `use-cache` - Enable Docker build cache
+
+## Required Environment
+
+- `DOCKER_REGISTRY` - Registry and organization (e.g., 'ghcr.io/servercontainers')
+
+## Testing
+
+Run build script with help: `./build_ubuntu.sh -h`
+
+---
+
+# Claude Code Sessions Guide
+
+This section provides collaborative guidance and philosophy when using the Claude Code Sessions system.
 
 ## Collaboration Philosophy
 

@@ -17,7 +17,52 @@
 # - `use-cache`: use build cache;
 # - `wsdd2`: build `wsdd2` image variant;
 
+show_help() {
+	cat << 'EOF'
+Usage: DOCKER_REGISTRY='ghcr.io/servercontainers' ./build_ubuntu.sh [VARIANTS...] [OPTIONS...]
+
+Build ServerContainers/samba Docker images for Ubuntu.
+
+Required Environment Variables:
+  DOCKER_REGISTRY    Registry and owner/org (e.g., 'ghcr.io/servercontainers' or 'servercontainers' for Docker Hub)
+
+Image Variants (builds all if none specified):
+  ad                 Build Active Directory variant
+  avahi              Build Avahi (zeroconf) variant
+  full               Build full variant (all features)
+  only               Build smbd-only variant (minimal)
+  wsdd2              Build WSDD2 variant
+
+Options:
+  force              Force build regardless of commit age
+  no-push            Build locally without pushing to registry
+  plain-log          Use plain format for build progress
+  use-cache          Use Docker build cache
+
+Examples:
+  # Build all variants and push to GitHub Container Registry
+  DOCKER_REGISTRY='ghcr.io/servercontainers' ./build_ubuntu.sh
+
+  # Build all variants and push to Docker Hub
+  DOCKER_REGISTRY='servercontainers' ./build_ubuntu.sh
+
+  # Build only AD variant locally
+  DOCKER_REGISTRY='ghcr.io/myorg' ./build_ubuntu.sh ad no-push
+
+  # Force build with plain logging
+  DOCKER_REGISTRY='servercontainers' ./build_ubuntu.sh force plain-log
+EOF
+}
+
 set -euo pipefail
+
+# Check for help flag
+for arg in "$@"; do
+	if [[ "$arg" == '-h' ]] || [[ "$arg" == '--help' ]]; then
+		show_help
+		exit 0
+	fi
+done
 
 [ -z "${DOCKER_REGISTRY-}" ] && echo "Error: Specify docker-registry in \`DOCKER_REGISTRY\` please." && exit 1
 
@@ -144,7 +189,7 @@ for variant in "${VARIANTS_TO_BUILD[@]}"; do
     --build-arg "WSDD2_INSTALL=${config[3]}" \
     -f "$REPO_ROOT/ubuntu.dockerfile" \
     $(grep -q 'use-cache' <<< "$*" || echo '--no-cache') \
-    $(grep -q 'no-push' <<< "$*" || echo "--platform '$(IFS=,; echo "${PLATFORMS[*]}")'") \
+    $(grep -q 'no-push' <<< "$*" || echo "--platform $(IFS=,; echo "${PLATFORMS[*]}")") \
     $(grep -q 'plain-log' <<< "$*" && echo '--progress=plain') \
     --pull \
     -t "$IMG:${config[0]}latest" \
@@ -159,3 +204,6 @@ if [ "$dangling_images" != '' ]; then
   # shellcheck disable=SC2086 # Intentional word splitting for multiple image IDs
   docker rmi -f $dangling_images
 fi
+
+# Clean up builder instance
+docker buildx rm "$BUILDER_INSTANCE_NAME" || true
