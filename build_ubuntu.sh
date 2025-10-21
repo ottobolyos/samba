@@ -101,11 +101,11 @@ echo "Variants to build: ${VARIANTS_TO_BUILD[*]}"
 
 # Get the Samba version
 # Note: This step take about 20-30 seconds to complete, not including pulling the image.
-SAMBA_VERSION="$(docker run --rm -it "$BASE_IMAGE" bash -c "apt-get update &> /dev/null && apt-cache madison samba | sort -V | tail -1 | sed -z 's/^ *samba \| [^:]*:\([0-9.]\+\).*$/\1/;s/[\n\r]//g'")"
+SAMBA_VERSION="$(docker run --rm "$BASE_IMAGE" bash -c "apt-get update &> /dev/null && apt-cache madison samba | sort -V | tail -1 | sed -z 's/^ *samba \| [^:]*:\([0-9.]\+\).*$/\1/;s/[\n\r]//g'")"
 echo "Samba version: $SAMBA_VERSION"
 
 # Get the Ubuntu version
-UBUNTU_VERSION="$(docker run --rm -it "$BASE_IMAGE" bash -c "source /etc/os-release && sed -z 's/^\([0-9.]\+\).*$/\1/;s/[\r\n]//g' <<< \"\$VERSION\"")"
+UBUNTU_VERSION="$(docker run --rm "$BASE_IMAGE" bash -c "source /etc/os-release && sed -z 's/^\([0-9.]\+\).*$/\1/;s/[\r\n]//g' <<< \"\$VERSION\"")"
 echo "Ubuntu version: $UBUNTU_VERSION"
 
 # Version tag suffix
