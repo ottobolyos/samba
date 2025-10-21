@@ -30,6 +30,12 @@ services:
       #HOST_IP: "192.168.1.10"
       #HOST_HOSTNAME: "nas.example.com"
 
+      # Optional: Use remote winbind service (requires WINBIND_DISABLE)
+      # This creates a local Unix socket that tunnels to a remote winbind server
+      #WINBIND_DISABLE: "true"
+      #WINBIND_SERVER: "kerberos-container"
+      #WINBIND_PORT: "9999"  # Optional, defaults to 9999
+
       GROUP_family: 1500
 
       ACCOUNT_alice: alipass

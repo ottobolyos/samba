@@ -1,0 +1,61 @@
+#!/bin/sh
+# Proxies local Unix socket to remote winbind service via TCP using socat
+#
+# Dependencies:
+# - coreutils (echo, sleep, mkdir)
+# - socat (socat)
+# - netcat-openbsd (nc)
+#
+# Exit codes:
+# - 0: Success
+# - 1: Configuration error
+
+set -e
+
+# Only run if both WINBIND_DISABLE and WINBIND_SERVER are set
+if [ -z "${WINBIND_DISABLE}" ] || [ -z "${WINBIND_SERVER}" ]; then
+	echo 'winbind-tunnel service not needed'
+	exit 0
+fi
+
+# Use default port if not specified
+WINBIND_PORT="${WINBIND_PORT:-9999}"
+
+# Validate WINBIND_PORT is numeric and in valid range
+if ! echo "${WINBIND_PORT}" | grep -qE '^[0-9]+$'; then
+	echo "ERROR: WINBIND_PORT must be numeric, got: ${WINBIND_PORT}"
+	exit 1
+fi
+
+if [ "${WINBIND_PORT}" -lt 1 ] || [ "${WINBIND_PORT}" -gt 65535 ]; then
+	echo "ERROR: WINBIND_PORT must be between 1-65535, got: ${WINBIND_PORT}"
+	exit 1
+fi
+
+# Validate WINBIND_SERVER contains only valid hostname/IP characters
+if ! echo "${WINBIND_SERVER}" | grep -qE '^[a-zA-Z0-9._-]+$'; then
+	echo "ERROR: WINBIND_SERVER contains invalid characters: ${WINBIND_SERVER}"
+	exit 1
+fi
+
+# Socket directory created by entrypoint script
+
+# Wait for remote server to be reachable with timeout
+MAX_RETRIES=30
+RETRY_COUNT=0
+echo "Waiting for remote winbind at ${WINBIND_SERVER}:${WINBIND_PORT}..."
+while ! nc -z "${WINBIND_SERVER}" "${WINBIND_PORT}" 2> /dev/null; do
+	RETRY_COUNT=$((RETRY_COUNT + 1))
+	if [ "${RETRY_COUNT}" -ge "${MAX_RETRIES}" ]; then
+		echo "ERROR: Remote winbind server ${WINBIND_SERVER}:${WINBIND_PORT} unreachable after ${MAX_RETRIES} seconds"
+		exit 1
+	fi
+	sleep 1
+done
+echo 'Remote winbind server is reachable'
+
+# Add small delay to prevent rapid restart loops if socat fails
+sleep 2
+
+# Create Unix socket that forwards to remote TCP
+exec socat "UNIX-LISTEN:/var/run/samba/winbindd/pipe,fork,reuseaddr" "TCP:${WINBIND_SERVER}:${WINBIND_PORT}"

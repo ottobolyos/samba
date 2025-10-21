@@ -40,7 +40,7 @@ RUN DEBIAN_FRONTEND='noninteractive' && \
   # Install dependencies
   && apt-get -y install \
     # Base dependencies
-    runit samba samba-client \
+    runit samba samba-client socat netcat-openbsd \
     $([ "$AVAHI_INSTALL" = 'true' ] && echo -n avahi-daemon) \
     $([ "$AD_INSTALL" = 'true' ] && echo -n \
       adcli \

@@ -9,3 +9,8 @@ variants.tar/.claude/hooks/__pycache__/
 /sessions/tasks/
 
 !/sessions/tasks/TEMPLATE.md
+
+# Backup files
+*.bak
+~*
+*~

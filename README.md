@@ -255,6 +255,44 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
     * default not set - set to any value to disable `winbind` service
     * use this if you want to use AD features without winbind
 
+* __WINBIND\_SERVER__
+    * _optional_ (AD only, requires `WINBIND_DISABLE`)
+    * default not set - hostname or IP of remote winbind server
+    * when set with `WINBIND_DISABLE`, creates a local Unix socket that tunnels NSS queries to the remote winbind service via TCP
+    * useful for multi-container setups where one container runs winbind and others proxy to it
+    * the samba container and remote winbind server must be on the same Docker network
+
+* __WINBIND\_PORT__
+    * _optional_ (AD only, used with `WINBIND_SERVER`)
+    * default `9999` - TCP port of the remote winbind server
+    * only used when `WINBIND_SERVER` is configured
+
+### Remote Winbind Configuration Example
+
+When using a separate kerberos container to provide winbind services:
+
+```yaml
+services:
+  kerberos:
+    image: your-kerberos-image
+    hostname: kerberos-server
+    networks:
+      - samba-network
+
+  samba:
+    image: servercontainers/samba
+    environment:
+      WINBIND_DISABLE: "true"
+      WINBIND_SERVER: "kerberos-server"
+      WINBIND_PORT: "9999"  # Optional, defaults to 9999
+    depends_on:
+      - kerberos
+    networks:
+      - samba-network
+```
+
+This creates a local Unix socket at `/var/run/samba/winbindd/pipe` that forwards all NSS queries to the remote winbind service. Performance impact is minimal (~0.5-2ms added latency per query).
+
 ## Some helpful in-depth information about TimeMachine and Avahi / Zeroconf
 
 ### General Infos

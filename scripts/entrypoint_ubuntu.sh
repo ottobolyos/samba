@@ -391,7 +391,21 @@ if [ ! -f "$INITALIZED" ]; then
 
   [ -n "${NETBIOS_DISABLE-}" ] && echo '>> NETBIOS - DISABLED' && rm -rf /container/config/runit/nmbd
 
-  [ -n "${WINBIND_DISABLE-}" ] && echo '>> WINBIND - DISABLED' && rm -rf /container/config/runit/winbind
+  if [ -n "${WINBIND_DISABLE-}" ]; then
+    if [ -n "${WINBIND_SERVER-}" ]; then
+      echo ">> WINBIND - DISABLED (using remote at ${WINBIND_SERVER}:${WINBIND_PORT:-9999})"
+      rm -rf '/container/config/runit/winbind'
+      # Create socket directory for remote winbind tunnel
+      mkdir -p '/var/run/samba/winbindd'
+    else
+      echo '>> WINBIND - DISABLED (no remote configured)'
+      rm -rf '/container/config/runit/winbind'
+      rm -rf '/container/config/runit/winbind-tunnel'
+    fi
+  else
+    echo '>> WINBIND - ENABLED (local)'
+    rm -rf '/container/config/runit/winbind-tunnel'
+  fi
 
   if [ "$AVAHI_INSTALL" = 'true' ] && [ -z "$AVAHI_DISABLE" ] && [ ! -f '/external/avahi/not-mounted' ]; then
     echo ">> EXTERNAL AVAHI: found external avahi, now maintaining avahi service file 'samba.service'"

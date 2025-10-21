@@ -22,11 +22,20 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
   - Active Directory configuration (lines 183-255)
   - AD DNS registration with host override support (lines 236-252)
   - Avahi/zeroconf setup (lines 258-312)
-  - Service management and optional service disabling (lines 392-404)
+  - Service management and optional service disabling (lines 392-406)
+  - Remote winbind proxy configuration (lines 394-406)
   - Samba volume configuration (lines 315-405)
 
+### Service Configuration
+- `config/runit/winbind-tunnel/run` - Remote winbind proxy service
+  - Proxies local Unix socket to remote winbind service via TCP
+  - Uses socat to forward `/var/run/samba/winbindd/pipe` to remote host
+  - Waits for remote server availability before starting (lines 28-32)
+  - Only runs when WINBIND_DISABLE and WINBIND_SERVER are both set (lines 16-19)
+
 ### Docker Configuration
-- `ubuntu.dockerfile` - Ubuntu-based Dockerfile
+- `ubuntu.dockerfile:43` - Ubuntu-based Dockerfile
+  - Installs socat and netcat-openbsd packages for remote winbind proxy
 - `Dockerfile` - Alpine-based Dockerfile
 - `docker-compose.yml:28-31` - Example composition with HOST_IP/HOST_HOSTNAME example
 
@@ -35,7 +44,11 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
 - `smb.conf` - Samba configuration template
 
 ### Documentation
-- `README.md:241-256` - Environment variables including HOST_IP, HOST_HOSTNAME, and WINBIND_DISABLE
+- `README.md:241-290` - Environment variables including:
+  - HOST_IP, HOST_HOSTNAME (lines 241-251)
+  - WINBIND_DISABLE (lines 253-256)
+  - WINBIND_SERVER, WINBIND_PORT (lines 258-268)
+  - Remote winbind configuration example (lines 270-290)
 - `TROUBLESHOOTING.md` - Common issues and solutions
 - `CHANGELOGS.md` - Historical changes
 
@@ -97,7 +110,7 @@ Configuration examples in README.md and docker-compose.yml
 
 ## Service Management
 
-Reference: `scripts/entrypoint_ubuntu.sh:392-404`
+Reference: `scripts/entrypoint_ubuntu.sh:392-416`
 
 The container supports optional disabling of specific services via environment variables:
 
@@ -106,9 +119,9 @@ The container supports optional disabling of specific services via environment v
 - Removes `/container/config/runit/nmbd`
 
 **WINBIND_DISABLE:**
-- Disables the winbind service in AD-enabled containers
+- Disables local winbind service in AD-enabled containers
 - Removes `/container/config/runit/winbind`
-- Allows using AD features without winbind
+- Can be used standalone or with remote winbind proxy
 - Reference: `README.md:253-256`
 
 **AVAHI_DISABLE:**
@@ -116,6 +129,37 @@ The container supports optional disabling of specific services via environment v
 - Checked in conjunction with AVAHI_INSTALL and external Avahi mount
 
 All disable flags follow the pattern: set to any value to disable the service.
+
+## Remote Winbind Proxy
+
+Reference: `scripts/entrypoint_ubuntu.sh:394-406`, `config/runit/winbind-tunnel/run`
+
+Enables NSS queries to be forwarded to a remote winbind service via TCP socket tunneling.
+
+**Configuration:**
+- Requires both `WINBIND_DISABLE` and `WINBIND_SERVER` environment variables
+- Optional `WINBIND_PORT` (defaults to 9999)
+
+**Architecture:**
+- Local Unix socket: `/var/run/samba/winbindd/pipe`
+- Remote connection: TCP to `${WINBIND_SERVER}:${WINBIND_PORT}`
+- Uses socat for bidirectional socket forwarding with fork and reuseaddr options
+- Waits for remote server availability using netcat before starting tunnel
+
+**Service Selection Logic:**
+- If `WINBIND_DISABLE` not set: Run local winbind, remove winbind-tunnel service
+- If `WINBIND_DISABLE` set without `WINBIND_SERVER`: Disable winbind completely
+- If both `WINBIND_DISABLE` and `WINBIND_SERVER` set: Run winbind-tunnel proxy, remove local winbind
+
+**Use Cases:**
+- Multi-container setups with dedicated Kerberos/authentication container
+- Sharing single winbind instance across multiple Samba containers
+- Separating authentication services from file serving containers
+
+**Requirements:**
+- Containers must be on same Docker network for hostname resolution
+- Remote winbind server must expose privileged pipe socket on TCP port
+- Reference example: `README.md:270-290`
 
 ## Testing
 
