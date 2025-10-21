@@ -250,6 +250,11 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
     * Must be used together with `HOST_IP`
     * When both are set, the container registers the host's hostname/IP instead of its own
 
+* __WINBIND\_DISABLE__
+    * _optional_ (AD only)
+    * default not set - set to any value to disable `winbind` service
+    * use this if you want to use AD features without winbind
+
 ## Some helpful in-depth information about TimeMachine and Avahi / Zeroconf
 
 ### General Infos

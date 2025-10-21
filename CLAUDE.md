@@ -22,6 +22,7 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
   - Active Directory configuration (lines 183-255)
   - AD DNS registration with host override support (lines 236-252)
   - Avahi/zeroconf setup (lines 258-312)
+  - Service management and optional service disabling (lines 392-404)
   - Samba volume configuration (lines 315-405)
 
 ### Docker Configuration
@@ -34,7 +35,7 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
 - `smb.conf` - Samba configuration template
 
 ### Documentation
-- `README.md:241-251` - Environment variables including HOST_IP and HOST_HOSTNAME
+- `README.md:241-256` - Environment variables including HOST_IP, HOST_HOSTNAME, and WINBIND_DISABLE
 - `TROUBLESHOOTING.md` - Common issues and solutions
 - `CHANGELOGS.md` - Historical changes
 
@@ -93,6 +94,28 @@ The container supports two modes for Active Directory DNS registration:
 - Warning issued if only one variable is set
 
 Configuration examples in README.md and docker-compose.yml
+
+## Service Management
+
+Reference: `scripts/entrypoint_ubuntu.sh:392-404`
+
+The container supports optional disabling of specific services via environment variables:
+
+**NETBIOS_DISABLE:**
+- Disables the NetBIOS name service (nmbd)
+- Removes `/container/config/runit/nmbd`
+
+**WINBIND_DISABLE:**
+- Disables the winbind service in AD-enabled containers
+- Removes `/container/config/runit/winbind`
+- Allows using AD features without winbind
+- Reference: `README.md:253-256`
+
+**AVAHI_DISABLE:**
+- Disables internal Avahi service
+- Checked in conjunction with AVAHI_INSTALL and external Avahi mount
+
+All disable flags follow the pattern: set to any value to disable the service.
 
 ## Testing
 

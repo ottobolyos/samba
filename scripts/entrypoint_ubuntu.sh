@@ -391,6 +391,8 @@ if [ ! -f "$INITALIZED" ]; then
 
   [ -n "${NETBIOS_DISABLE-}" ] && echo '>> NETBIOS - DISABLED' && rm -rf /container/config/runit/nmbd
 
+  [ -n "${WINBIND_DISABLE-}" ] && echo '>> WINBIND - DISABLED' && rm -rf /container/config/runit/winbind
+
   if [ "$AVAHI_INSTALL" = 'true' ] && [ -z "$AVAHI_DISABLE" ] && [ ! -f '/external/avahi/not-mounted' ]; then
     echo ">> EXTERNAL AVAHI: found external avahi, now maintaining avahi service file 'samba.service'"
     echo '>> EXTERNAL AVAHI: internal avahi gets disabled'
