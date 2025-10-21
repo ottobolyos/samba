@@ -2,7 +2,7 @@
 # Proxies local Unix socket to remote winbind service via TCP using socat
 #
 # Dependencies:
-# - coreutils (echo, sleep, mkdir)
+# - coreutils (echo, sleep, mkdir, test)
 # - socat (socat)
 # - netcat-openbsd (nc)
 #
@@ -54,8 +54,41 @@ while ! nc -z "${WINBIND_SERVER}" "${WINBIND_PORT}" 2> /dev/null; do
 done
 echo 'Remote winbind server is reachable'
 
-# Add small delay to prevent rapid restart loops if socat fails
-sleep 2
+# Start socat in background to create Unix socket
+socat "UNIX-LISTEN:/var/run/samba/winbindd/pipe,fork,reuseaddr" "TCP:${WINBIND_SERVER}:${WINBIND_PORT}" &
+SOCAT_PID=$!
 
-# Create Unix socket that forwards to remote TCP
-exec socat "UNIX-LISTEN:/var/run/samba/winbindd/pipe,fork,reuseaddr" "TCP:${WINBIND_SERVER}:${WINBIND_PORT}"
+# Wait for Unix socket to be created
+MAX_SOCKET_WAIT=10
+SOCKET_WAIT=0
+echo 'Waiting for Unix socket to be created...'
+while [ ! -S /var/run/samba/winbindd/pipe ]; do
+	if [ "${SOCKET_WAIT}" -ge "${MAX_SOCKET_WAIT}" ]; then
+		echo "ERROR: Unix socket not created after ${MAX_SOCKET_WAIT} seconds"
+		kill "${SOCAT_PID}" 2> /dev/null || true
+		exit 1
+	fi
+
+	# Check if socat is still running
+	if ! kill -0 "${SOCAT_PID}" 2> /dev/null; then
+		echo 'ERROR: socat process died unexpectedly'
+		exit 1
+	fi
+
+	sleep 1
+	SOCKET_WAIT=$((SOCKET_WAIT + 1))
+done
+
+echo 'Unix socket created successfully'
+
+# Verify socket is working by checking socat is still alive
+sleep 1
+if ! kill -0 "${SOCAT_PID}" 2> /dev/null; then
+	echo 'ERROR: socat process died after socket creation'
+	exit 1
+fi
+
+echo "Winbind proxy tunnel established (PID: ${SOCAT_PID})"
+
+# Wait for socat to exit and restart service if it dies
+wait "${SOCAT_PID}"

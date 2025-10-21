@@ -30,8 +30,15 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
 - `config/runit/winbind-tunnel/run` - Remote winbind proxy service
   - Proxies local Unix socket to remote winbind service via TCP
   - Uses socat to forward `/var/run/samba/winbindd/pipe` to remote host
-  - Waits for remote server availability before starting (lines 28-32)
+  - Waits for remote server availability before starting (lines 43-54)
+  - Parameter validation for WINBIND_SERVER and WINBIND_PORT (lines 24-39)
+  - Socket verification after socat startup (lines 61-89)
+  - Process monitoring to detect socat failures (lines 72-76, 84-89)
   - Only runs when WINBIND_DISABLE and WINBIND_SERVER are both set (lines 16-19)
+- `config/runit/samba/run` - Samba daemon service
+  - Waits for winbind proxy socket before starting smbd (lines 14-28)
+  - 60-second timeout prevents indefinite hangs
+  - Socket synchronization prevents Error 53 and Error 1311 race conditions
 
 ### Docker Configuration
 - `ubuntu.dockerfile:43` - Ubuntu-based Dockerfile
@@ -44,12 +51,16 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
 - `smb.conf` - Samba configuration template
 
 ### Documentation
-- `README.md:241-290` - Environment variables including:
+- `README.md:241-369` - Environment variables including:
   - HOST_IP, HOST_HOSTNAME (lines 241-251)
   - WINBIND_DISABLE (lines 253-256)
   - WINBIND_SERVER, WINBIND_PORT (lines 258-268)
-  - Remote winbind configuration example (lines 270-290)
+  - Remote winbind proxy architecture documentation (lines 270-369)
+  - Multi-container docker-compose example with network topology
 - `TROUBLESHOOTING.md` - Common issues and solutions
+  - Error 1311 "Domain not available" (line 151)
+  - Error 53 "Network path not found" (line 243)
+  - Remote winbind proxy troubleshooting (lines 336-344)
 - `CHANGELOGS.md` - Historical changes
 
 ## Build Workflow
@@ -132,34 +143,51 @@ All disable flags follow the pattern: set to any value to disable the service.
 
 ## Remote Winbind Proxy
 
-Reference: `scripts/entrypoint_ubuntu.sh:394-406`, `config/runit/winbind-tunnel/run`
+Reference: `scripts/entrypoint_ubuntu.sh:394-406`, `config/runit/winbind-tunnel/run`, `config/runit/samba/run`
 
-Enables NSS queries to be forwarded to a remote winbind service via TCP socket tunneling.
+Enables NSS queries to be forwarded to a remote winbind service via TCP socket tunneling. Solves authentication issues (Error 53, Error 1311) when Samba containers run on isolated Docker networks without direct Active Directory access.
 
 **Configuration:**
 - Requires both `WINBIND_DISABLE` and `WINBIND_SERVER` environment variables
 - Optional `WINBIND_PORT` (defaults to 9999)
+- Validates port range (1-65535) and server hostname format
 
 **Architecture:**
 - Local Unix socket: `/var/run/samba/winbindd/pipe`
 - Remote connection: TCP to `${WINBIND_SERVER}:${WINBIND_PORT}`
 - Uses socat for bidirectional socket forwarding with fork and reuseaddr options
-- Waits for remote server availability using netcat before starting tunnel
+- Socket synchronization between winbind-tunnel and samba services prevents race conditions
+
+**Startup Sequence:**
+1. winbind-tunnel service waits for remote server availability (30 second timeout)
+2. Starts socat in background to create Unix socket proxy
+3. Verifies socket creation with 10 second timeout
+4. Monitors socat process health before signaling ready
+5. samba service waits for socket availability (60 second timeout)
+6. smbd starts only after socket is confirmed ready
 
 **Service Selection Logic:**
 - If `WINBIND_DISABLE` not set: Run local winbind, remove winbind-tunnel service
 - If `WINBIND_DISABLE` set without `WINBIND_SERVER`: Disable winbind completely
 - If both `WINBIND_DISABLE` and `WINBIND_SERVER` set: Run winbind-tunnel proxy, remove local winbind
 
+**Error Prevention:**
+- Socket synchronization prevents Error 53 "Network path not found"
+- Process monitoring prevents Error 1311 "Domain not available"
+- Timeouts prevent indefinite hangs during startup
+- Parameter validation catches configuration errors early
+
 **Use Cases:**
 - Multi-container setups with dedicated Kerberos/authentication container
 - Sharing single winbind instance across multiple Samba containers
 - Separating authentication services from file serving containers
+- Running Samba on isolated internal networks without AD access
 
 **Requirements:**
 - Containers must be on same Docker network for hostname resolution
 - Remote winbind server must expose privileged pipe socket on TCP port
-- Reference example: `README.md:270-290`
+- Reference architecture and examples: `README.md:270-369`
+- Troubleshooting guide: `TROUBLESHOOTING.md:151, 243, 336-344`
 
 ## Testing
 

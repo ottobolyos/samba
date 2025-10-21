@@ -144,3 +144,283 @@ When using `realm leave` to leave an AD realm, it modifies `/etc/samba/smb.conf`
 **Problem:** When rejoining with `realm join`, these settings are not restored. While `realm join` succeeds, the incomplete `smb.conf` causes `net ads join` to fail and breaks `smbd`/`nmbd`/`winbind` functionality.
 
 **Workaround:** Manually restore the AD-specific settings in `smb.conf` after rejoining, or recreate the container to reset to the proper AD configuration.
+# SMB Authentication Errors with Remote Winbind Proxy
+
+When using the remote winbind proxy feature (WINBIND_DISABLE + WINBIND_SERVER) to run Samba containers on isolated Docker networks, you may encounter authentication errors from Windows clients.
+
+## Error 1311: "Domain not available"
+
+### Symptoms
+
+Windows clients can connect by IP address but get this error:
+```
+System error 1311 has occurred.
+We can't sign you in with this credential because your domain isn't available.
+Make sure your device is connected to your organization's network and try again.
+```
+
+SMB container logs show:
+```
+WARNING: Failed to create BUILTIN\Administrators group! Can Winbind allocate gids?
+WARNING: Failed to create BUILTIN\Users group! Can Winbind allocate gids?
+```
+
+### Root Cause
+
+The `smbd` daemon started before the winbind-tunnel Unix socket was fully established. Even though the TCP connection to the remote winbind server was verified, the local Unix socket at `/var/run/samba/winbindd/pipe` hadn't been created yet.
+
+This timing issue caused smbd to fail group allocation, preventing Windows clients from authenticating.
+
+### How It's Fixed
+
+The SMB container now includes automatic synchronization:
+
+1. **config/runit/winbind-tunnel/run** - Verifies socat successfully creates the Unix socket
+   - Starts socat in background and captures PID
+   - Waits up to 10 seconds for socket creation
+   - Verifies socat is still running after socket appears
+   - Monitors socat and allows runit to restart if it dies
+
+2. **config/runit/samba/run** - Waits for socket before starting smbd
+   - Checks if remote winbind proxy is configured
+   - Waits up to 60 seconds for Unix socket to exist
+   - Only then starts smbd
+   - Ensures group allocation succeeds immediately
+
+### Verification Steps
+
+Check that the winbind proxy is working:
+
+```bash
+# Verify socat is running in SMB container
+docker exec samba-container ps aux | grep socat
+# Expected: socat UNIX-LISTEN:/var/run/samba/winbindd/pipe...
+
+# Verify Unix socket exists
+docker exec samba-container ls -la /var/run/samba/winbindd/pipe
+# Expected: srwxrwxrwx ... /var/run/samba/winbindd/pipe
+
+# Test user resolution via winbind proxy
+docker exec samba-container getent passwd username
+# Expected: username:*:10000:10000:User Name:/home/username:/bin/bash
+
+# Test group resolution
+docker exec samba-container getent group groupname
+# Expected: groupname:*:10001:user1,user2,user3
+```
+
+If these commands work, the winbind proxy is functioning correctly.
+
+### If Problem Persists
+
+1. **Check kerberos container** - Verify winbind is running:
+   ```bash
+   docker exec kerberos-container service winbind status
+   docker exec kerberos-container wbinfo -u  # List AD users
+   docker exec kerberos-container wbinfo -t  # Test trust
+   ```
+
+2. **Check TCP proxy** - Verify socat is exposing winbind on port 9999:
+   ```bash
+   docker exec kerberos-container ps aux | grep socat
+   docker exec kerberos-container netstat -tulpn | grep 9999
+   ```
+
+3. **Check network connectivity** - Verify SMB can reach kerberos:
+   ```bash
+   docker exec samba-container nc -zv kerberos-server 9999
+   ```
+
+4. **Check environment variables** - Both must be set:
+   ```bash
+   docker exec samba-container env | grep WINBIND
+   # Expected:
+   # WINBIND_DISABLE=true
+   # WINBIND_SERVER=kerberos-server
+   # WINBIND_PORT=9999
+   ```
+
+## Error 53: "Network path not found"
+
+### Symptoms
+
+Windows clients cannot connect using the hostname:
+```powershell
+PS> net use Z: \\tooling.wooddale.tempco.com\tooling
+System error 53 has occurred.
+The network path was not found.
+```
+
+But connection by IP address may work (though it triggers Error 1311 if winbind proxy has issues).
+
+### Root Cause
+
+The hostname `tooling.wooddale.tempco.com` is not resolving to the correct IP address for Windows clients. This happens when:
+
+1. **DNS registration failed** - The container didn't register in AD DNS
+2. **Wrong IP registered** - The kerberos container registered its own IP instead of the SMB container's client-facing IP
+3. **HOST_IP/HOST_HOSTNAME not set** - Environment variables missing or incomplete
+
+### Solution
+
+Configure the kerberos container to register the SMB container's client-facing IP address in AD DNS:
+
+```yaml
+services:
+  kerberos:
+    environment:
+      # BOTH must be set together
+      HOST_IP: "172.23.0.3"  # SMB container's client-facing IP
+      HOST_HOSTNAME: "tooling.wooddale.tempco.com"
+```
+
+**Important:** The IP address should be the SMB container's **client-facing network interface** IP, not the internal network used for winbind proxy communication.
+
+### Verification Steps
+
+1. **Check DNS resolution** from Windows client:
+   ```powershell
+   nslookup tooling.wooddale.tempco.com
+   # Should return: 172.23.0.3 (SMB container's client-facing IP)
+   ```
+
+2. **Test network connectivity**:
+   ```powershell
+   ping tooling.wooddale.tempco.com
+   Test-NetConnection -ComputerName tooling.wooddale.tempco.com -Port 445
+   ```
+
+3. **Check kerberos container logs** for DNS registration:
+   ```bash
+   docker logs kerberos-container 2>&1 | grep -i dns
+   # Expected: "Successfully registered hostname with DNS"
+   ```
+
+4. **Verify AD DNS record** (from domain controller or kerberos container):
+   ```bash
+   nslookup tooling.wooddale.tempco.com
+   # Should show: Address: 172.23.0.3
+   ```
+
+### If Problem Persists
+
+1. **Check environment variables** in kerberos container:
+   ```bash
+   docker exec kerberos-container env | grep HOST
+   # Expected:
+   # HOST_IP=172.23.0.3
+   # HOST_HOSTNAME=tooling.wooddale.tempco.com
+   ```
+
+2. **Manually register in AD DNS** (temporary workaround):
+   ```bash
+   docker exec kerberos-container net ads dns register tooling.wooddale.tempco.com 172.23.0.3
+   ```
+
+3. **Check SMB container network configuration**:
+   ```bash
+   docker inspect samba-container | jq '.[].NetworkSettings.Networks'
+   # Verify the client-facing network has IP 172.23.0.3
+   ```
+
+4. **Use hosts file** for testing (Windows client):
+   ```
+   # C:\Windows\System32\drivers\etc\hosts
+   172.23.0.3  tooling.wooddale.tempco.com tooling
+   ```
+
+## Common Mistakes
+
+### 1. Starting smbd before winbind socket ready
+
+**Symptom:** Error 1311 even though socat is running
+
+**Cause:** Old versions didn't wait for socket creation
+
+**Fix:** Update to latest image with automatic socket synchronization (config/runit/samba/run waits for socket)
+
+### 2. Wrong HOST_IP value
+
+**Symptom:** Error 53, DNS resolves to wrong IP
+
+**Cause:** Used kerberos container's IP or internal network IP instead of SMB container's client-facing IP
+
+**Fix:** Set HOST_IP to the SMB container's client-facing network interface IP
+
+### 3. Only one of HOST_IP/HOST_HOSTNAME set
+
+**Symptom:** Kerberos container log shows warning about incomplete configuration
+
+**Fix:** Both environment variables must be set together, or both must be unset
+
+### 4. Containers on different Docker networks
+
+**Symptom:** SMB container can't reach kerberos:9999
+
+**Cause:** No shared network between kerberos and samba containers
+
+**Fix:** Ensure both containers are on at least one common Docker network
+
+### 5. Missing shared keytab
+
+**Symptom:** Authentication fails even with working winbind proxy
+
+**Cause:** SMB container can't decrypt Kerberos tickets
+
+**Fix:** Mount kerberos container's keytab to SMB container:
+```yaml
+samba:
+  volumes:
+    - kerberos-config:/etc/krb5:ro
+```
+
+## Advanced Debugging
+
+### Check smbd logs for winbind errors
+
+```bash
+docker exec samba-container tail -f /var/log/samba/log.smbd
+```
+
+Look for:
+- "Failed to connect to winbind"
+- "Domain not available"
+- "User not found"
+- "Group not found"
+
+### Monitor winbind-tunnel service
+
+```bash
+# Check service status
+docker exec samba-container sv status winbind-tunnel
+
+# View service logs
+docker logs samba-container 2>&1 | grep -i winbind
+```
+
+### Test winbind functionality directly
+
+From kerberos container:
+```bash
+# List AD users
+wbinfo -u
+
+# List AD groups
+wbinfo -g
+
+# Test trust with AD
+wbinfo -t
+
+# Get user info
+wbinfo -i username
+```
+
+From SMB container (via proxy):
+```bash
+# Same commands should work via proxy
+getent passwd username
+getent group groupname
+id username
+```
+
+If kerberos container commands work but SMB container commands fail, the winbind proxy connection is broken.

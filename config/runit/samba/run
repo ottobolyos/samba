@@ -1,3 +1,31 @@
-#!/bin/sh -x
+#!/bin/sh
+# Samba daemon service
+#
+# Dependencies:
+# - coreutils (echo, sleep, test)
+# - samba (smbd)
+#
+# Exit codes:
+# - 0: Success
+
+set -e
+
+# Wait for winbind (either local or remote proxy) to be ready
+if [ -n "${WINBIND_SERVER}" ] && [ -n "${WINBIND_DISABLE}" ]; then
+	# Using remote winbind proxy - wait for socket
+	echo 'Waiting for winbind proxy socket...'
+	MAX_WAIT=60
+	WAITED=0
+	while [ ! -S /var/run/samba/winbindd/pipe ]; do
+		if [ "${WAITED}" -ge "${MAX_WAIT}" ]; then
+			echo "ERROR: Winbind proxy socket not ready after ${MAX_WAIT} seconds"
+			exit 1
+		fi
+		sleep 1
+		WAITED=$((WAITED + 1))
+	done
+	echo 'Winbind proxy socket ready'
+fi
+
 sleep 2
 exec smbd --foreground

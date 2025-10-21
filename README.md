@@ -267,31 +267,139 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
     * default `9999` - TCP port of the remote winbind server
     * only used when `WINBIND_SERVER` is configured
 
-### Remote Winbind Configuration Example
+### Remote Winbind Proxy Architecture
 
-When using a separate kerberos container to provide winbind services:
+When running Samba containers on isolated Docker networks (with `internal: true`), the SMB container cannot reach Active Directory domain controllers to perform authorization checks. This causes authentication errors:
+
+- **Error 53** - "Network path not found" (DNS resolution failure)
+- **Error 1311** - "Domain not available" (winbind communication failure)
+
+The solution uses a **proxy architecture** where a separate "kerberos container" handles AD integration and exposes winbind via TCP socket forwarding:
+
+```
+External Network (AD Domain Controllers)
+           ↑
+           │ (AD queries via LDAP/Kerberos)
+    [Kerberos Container]
+      - Domain-joined to AD
+      - winbind daemon running
+      - socat TCP proxy on port 9999
+      - Connected to both external and internal networks
+           │
+           ↓ (TCP socket forwarding via Docker network)
+   Internal Network (isolated: true)
+           ↓
+    [SMB Container]
+      - socat client creates local Unix socket
+      - Forwards to kerberos:9999
+      - smbd queries local socket
+      - NO direct AD access needed
+```
+
+#### How It Works
+
+**Kerberos Container (Server Side):**
+1. Joins Active Directory domain
+2. Starts winbind daemon (creates `/var/run/samba/winbindd/pipe`)
+3. Runs socat to expose winbind over TCP on port 9999
+
+**SMB Container (Client Side):**
+1. Runs socat client to create local Unix socket `/var/run/samba/winbindd/pipe`
+2. Forwards all NSS queries to `kerberos:9999` over Docker network
+3. smbd queries local socket as if winbind were running locally
+
+#### Configuration Example
+
+Complete docker-compose.yml setup:
 
 ```yaml
+networks:
+  external-network:
+    # Has route to AD domain controllers
+    internal: false
+  internal-network:
+    # Isolated from external access
+    internal: true
+  client-network:
+    # For Windows clients to access SMB
+    internal: false
+
 services:
   kerberos:
     image: your-kerberos-image
     hostname: kerberos-server
     networks:
-      - samba-network
+      - external-network  # For AD access
+      - internal-network  # Shared with SMB container
+    environment:
+      # Register SMB container's IP in AD DNS
+      HOST_IP: "172.23.0.3"  # SMB container's client-facing IP
+      HOST_HOSTNAME: "tooling.wooddale.tempco.com"
+      # AD configuration
+      SAMBA_REALM: "WOODDALE.TEMPCO.COM"
+      SAMBA_WORKGROUP: "TEMPCO"
 
   samba:
     image: servercontainers/samba
+    hostname: tooling
+    networks:
+      internal-network:
+        ipv4_address: 172.18.0.3  # For kerberos communication
+      client-network:
+        ipv4_address: 172.23.0.3  # For Windows clients
     environment:
+      # Remote winbind proxy configuration
       WINBIND_DISABLE: "true"
       WINBIND_SERVER: "kerberos-server"
       WINBIND_PORT: "9999"  # Optional, defaults to 9999
+      # AD configuration (for keytab/Kerberos)
+      SAMBA_REALM: "WOODDALE.TEMPCO.COM"
+      SAMBA_WORKGROUP: "TEMPCO"
+    volumes:
+      - kerberos-config:/etc/krb5:ro  # Shared keytab
+      - smb-data:/shares
     depends_on:
       - kerberos
-    networks:
-      - samba-network
+
+volumes:
+  kerberos-config:
+    # Managed by kerberos container
+  smb-data:
 ```
 
-This creates a local Unix socket at `/var/run/samba/winbindd/pipe` that forwards all NSS queries to the remote winbind service. Performance impact is minimal (~0.5-2ms added latency per query).
+#### Important Notes
+
+1. **DNS Registration**: Set `HOST_IP` and `HOST_HOSTNAME` in the kerberos container to register the SMB container's client-facing IP address in AD DNS. This allows Windows clients to resolve the hostname correctly.
+
+2. **Shared Keytab**: Mount the kerberos container's keytab to the SMB container (read-only) so smbd can decrypt Kerberos tickets.
+
+3. **Network Configuration**: The SMB container needs two network interfaces:
+   - One shared with kerberos container (for winbind proxy)
+   - One for Windows clients (can be isolated or not)
+
+4. **Startup Timing**: The SMB container automatically waits for the winbind proxy socket to be ready before starting smbd. This ensures group allocation succeeds immediately.
+
+5. **Performance**: Minimal impact (~0.5-2ms added latency per NSS query via TCP proxy).
+
+#### Verification Commands
+
+Check if winbind proxy is working:
+
+```bash
+# From SMB container - verify socat is running
+docker exec samba-container ps aux | grep socat
+
+# Verify Unix socket exists
+docker exec samba-container ls -la /var/run/samba/winbindd/pipe
+
+# Test user resolution via winbind proxy
+docker exec samba-container getent passwd username
+
+# Test group resolution
+docker exec samba-container getent group groupname
+```
+
+For detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#smb-authentication-errors-with-remote-winbind-proxy).
 
 ## Some helpful in-depth information about TimeMachine and Avahi / Zeroconf
 
