@@ -2,7 +2,7 @@
 
 ## Repository Purpose
 
-Docker container for Samba server with support for Active Directory, Avahi (zeroconf), and WSDD2 (Windows network discovery). Provides multi-architecture builds for x86_64, arm64, and arm platforms on both Alpine and Ubuntu base images.
+Docker container for Samba server with support for Active Directory, LDAP authentication, Avahi (zeroconf), and WSDD2 (Windows network discovery). Provides multi-architecture builds for x86_64, arm64, and arm platforms on both Alpine and Ubuntu base images.
 
 ## Key Files
 
@@ -25,6 +25,11 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
   - Service management and optional service disabling (lines 392-406)
   - Remote winbind proxy configuration (lines 394-406)
   - Samba volume configuration (lines 315-405)
+  - LDAP authentication configuration (lines 440-458)
+    - Runs on every container start for password rotation and self-healing
+    - Validates LDAP_ADMIN_PASSWORD presence when LDAP_ENABLE is set
+    - Configures admin credentials in secrets.tdb via smbpasswd
+    - Exit code 7 on LDAP configuration errors
 
 ### Service Configuration
 - `config/runit/winbind-tunnel/run` - Remote winbind proxy service
@@ -51,13 +56,23 @@ Docker container for Samba server with support for Active Directory, Avahi (zero
 - `smb.conf` - Samba configuration template
 
 ### Documentation
-- `README.md:241-369` - Environment variables including:
+- `README.md` - Environment variables and configuration examples
+  - LDAP authentication configuration (lines 204-279)
+    - LDAP_ENABLE and LDAP_ADMIN_PASSWORD variables
+    - LDAP configuration example with docker-compose
+    - Docker secrets integration for secure password storage
+    - Password rotation instructions
   - HOST_IP, HOST_HOSTNAME (lines 241-251)
   - WINBIND_DISABLE (lines 253-256)
   - WINBIND_SERVER, WINBIND_PORT (lines 258-268)
   - Remote winbind proxy architecture documentation (lines 270-369)
   - Multi-container docker-compose example with network topology
 - `TROUBLESHOOTING.md` - Common issues and solutions
+  - LDAP authentication issues (lines 430-536)
+    - Exit code 7 troubleshooting
+    - LDAP bind failures and connectivity
+    - Configuration validation commands
+    - Password rotation procedure
   - Error 1311 "Domain not available" (line 151)
   - Error 53 "Network path not found" (line 243)
   - Remote winbind proxy troubleshooting (lines 336-344)
@@ -118,6 +133,45 @@ The container supports two modes for Active Directory DNS registration:
 - Warning issued if only one variable is set
 
 Configuration examples in README.md and docker-compose.yml
+
+## LDAP Authentication
+
+Reference: `scripts/entrypoint_ubuntu.sh:440-458`, `README.md:204-279`, `TROUBLESHOOTING.md:430-536`
+
+The container supports LDAP as a passdb backend for user authentication, allowing Samba to authenticate users against an external LDAP directory.
+
+**Configuration:**
+- Requires `LDAP_ENABLE` environment variable (any value enables it)
+- Requires `LDAP_ADMIN_PASSWORD` environment variable (password for LDAP admin DN)
+- Requires Samba global configuration for LDAP passdb backend:
+  - `passdb backend = ldapsam:ldap://your-ldap-server`
+  - `ldap admin dn = cn=admin,dc=example,dc=com`
+  - `ldap suffix = dc=example,dc=com`
+
+**Behavior:**
+- LDAP configuration runs on every container start (not just initialization)
+- Supports password rotation - restart container with new password to update
+- Provides self-healing - reconfigures credentials if secrets.tdb becomes corrupted
+- Stores admin credentials securely in `/var/lib/samba/private/secrets.tdb` via `smbpasswd -w`
+- Exit code 7 on LDAP configuration errors
+
+**Security:**
+- Use Docker secrets or secure environment variable injection
+- Avoid plaintext passwords in docker-compose files
+- LDAP admin password never logged or exposed in container output
+
+**Important Notes:**
+- Do NOT use `ACCOUNT_*` environment variables when LDAP is enabled
+- Users are managed in LDAP directory, not local smbpasswd
+- LDAP server must be accessible from container network
+- Supports SSL/TLS via standard LDAP configuration options
+- **LDAP and Active Directory are mutually exclusive** - container exits with error code 7 if both are enabled
+
+**Password Rotation:**
+1. Change password in LDAP server
+2. Update `LDAP_ADMIN_PASSWORD` environment variable
+3. Restart container to apply new credentials
+4. Verify success via container logs: `>> LDAP: successfully configured`
 
 ## Service Management
 

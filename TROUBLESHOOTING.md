@@ -424,3 +424,118 @@ id username
 ```
 
 If kerberos container commands work but SMB container commands fail, the winbind proxy connection is broken.
+
+---
+
+## LDAP Authentication Issues
+
+### Container exits with code 7
+
+**Symptom:** Container fails to start with exit code 7 and error message about LDAP
+
+**Possible causes:**
+
+1. **Both LDAP and Active Directory enabled**
+   - **Error:** `ERROR: LDAP: Cannot enable both LDAP and Active Directory authentication simultaneously.`
+   - **Cause:** Both `LDAP_ENABLE` and Active Directory (via `AD_INSTALL` without `AD_DISABLE`) are enabled
+   - **Fix:** Choose one authentication backend - either LDAP or Active Directory, not both
+
+2. **Missing LDAP_ADMIN_PASSWORD**
+   - **Error:** `ERROR: LDAP: $LDAP_ADMIN_PASSWORD must be defined when LDAP support is enabled.`
+   - **Fix:** Set the `LDAP_ADMIN_PASSWORD` environment variable
+
+3. **smbpasswd command failed**
+   - **Error:** `ERROR: LDAP: Failed to configure admin credentials in secrets.tdb`
+   - **Cause:** Permissions issue, corrupted Samba installation, or smb.conf syntax error
+   - **Fix:** Check smb.conf syntax with `testparm -s`, verify `/var/lib/samba/private` exists
+
+### LDAP bind failures
+
+**Symptom:** Container starts but Samba can't authenticate users, logs show LDAP bind errors
+
+**Debugging steps:**
+
+1. **Verify LDAP server connectivity:**
+   ```bash
+   docker exec samba-container ldapsearch -x -H ldap://your-ldap-server -D "cn=admin,dc=example,dc=com" -W -b "dc=example,dc=com"
+   ```
+
+2. **Check LDAP configuration in smb.conf:**
+   ```bash
+   docker exec samba-container testparm -s | grep ldap
+   ```
+
+   Should show:
+   ```
+   passdb backend = ldapsam:ldap://your-ldap-server
+   ldap admin dn = cn=admin,dc=example,dc=com
+   ldap suffix = dc=example,dc=com
+   ```
+
+3. **Verify secrets.tdb contains LDAP password:**
+   ```bash
+   docker exec samba-container tdbdump /var/lib/samba/private/secrets.tdb | grep LDAP_BIND_PW
+   ```
+
+   Should show a key like:
+   ```
+   key(XX) = "SECRETS/LDAP_BIND_PW/cn=admin,dc=example,dc=com"
+   ```
+
+4. **Check Samba logs for LDAP errors:**
+   ```bash
+   docker exec samba-container tail -f /var/log/samba/log.smbd
+   ```
+
+   Look for:
+   - `ldap_bind: Invalid credentials` - Wrong LDAP_ADMIN_PASSWORD
+   - `ldap_connect_system: Failed to retrieve password` - secrets.tdb not configured
+   - `Connection refused` - LDAP server not accessible
+
+### Common LDAP configuration mistakes
+
+1. **Wrong LDAP admin DN**
+   - **Symptom:** `ldap_bind: Invalid DN syntax`
+   - **Fix:** Verify the DN format matches your LDAP schema: `cn=admin,dc=example,dc=com`
+
+2. **LDAP server not accessible from container**
+   - **Symptom:** `Can't contact LDAP server`
+   - **Fix:** Use IP address instead of hostname, or ensure DNS resolution works inside container
+   - **Test:** `docker exec samba-container ping ldap.example.com`
+
+3. **Missing ldap suffix configuration**
+   - **Symptom:** `No such object` errors in logs
+   - **Fix:** Set `SAMBA_GLOBAL_CONFIG_ldap_SPACE_suffix` to your base DN
+
+4. **SSL/TLS issues**
+   - **Symptom:** `TLS handshake failed` or `certificate verify failed`
+   - **Fix:** Either:
+     - Use `ldap://` instead of `ldaps://` for testing
+     - Set `SAMBA_GLOBAL_CONFIG_ldap_SPACE_ssl: "off"` for testing
+     - Mount proper CA certificates if using SSL
+     - Set `SAMBA_GLOBAL_CONFIG_ldap_SPACE_ssl: "start_tls"` for STARTTLS
+
+### Password rotation
+
+LDAP admin password is configured on every container start (not just first start). To rotate the password:
+
+1. Change password in LDAP server
+2. Update `LDAP_ADMIN_PASSWORD` environment variable
+3. Restart the container: `docker restart samba-container`
+4. Verify new password is stored: Check container logs for `>> LDAP: successfully configured`
+
+### Verifying LDAP authentication works
+
+Test LDAP user authentication:
+
+```bash
+# List users from LDAP
+docker exec samba-container pdbedit -L
+
+# Should show users from LDAP directory, not local smbpasswd
+
+# Test SMB authentication with LDAP user
+smbclient //localhost/shared -U ldapuser%password
+```
+
+If `pdbedit -L` returns empty or shows errors, LDAP integration is not working correctly.

@@ -20,6 +20,7 @@
 # 4 - AD only: Failed to join realm
 # 5 - AD only: Failed to join domain
 # 6 - AD only: Failed to register DNS entry to Active Directory
+# 7 - LDAP only: LDAP configuration failed (missing `$LDAP_ADMIN_PASSWORD` or smbpasswd command failed)
 
 set -euo pipefail
 
@@ -434,6 +435,33 @@ if [ ! -f "$INITALIZED" ]; then
   touch "$INITALIZED"
 else
   echo '>> CONTAINER: already initialized - direct start of samba'
+fi
+
+##
+# LDAP Configuration (runs on every start for password rotation and self-healing)
+##
+if [ -n "${LDAP_ENABLE-}" ]; then
+  echo '>> LDAP: Configuring LDAP authentication ...'
+
+  # Check for conflicting authentication backends
+  if [ "${AD_INSTALL-}" = 'true' ] && [ "${AD_DISABLE-}" != 'true' ]; then
+    echo 'ERROR: LDAP: Cannot enable both LDAP and Active Directory authentication simultaneously.' 1>&2
+    echo 'ERROR: LDAP: Please use either LDAP_ENABLE or Active Directory (AD_INSTALL), not both.' 1>&2
+    exit 7
+  fi
+
+  if [ -z "${LDAP_ADMIN_PASSWORD-}" ]; then
+    echo 'ERROR: LDAP: `$LDAP_ADMIN_PASSWORD` must be defined when LDAP support is enabled.' 1>&2
+    exit 7
+  fi
+
+  echo '>> LDAP: Setting LDAP admin credentials in secrets.tdb ...'
+  if ! smbpasswd -w "$LDAP_ADMIN_PASSWORD" > /dev/null 2>&1; then
+    echo 'ERROR: LDAP: Failed to configure admin credentials in secrets.tdb' 1>&2
+    exit 7
+  fi
+
+  echo '>> LDAP: successfully configured'
 fi
 
 ##

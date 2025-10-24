@@ -201,6 +201,85 @@ If you experience Problems, take a look at this file: [TROUBLESHOOTING.md](TROUB
     * for timemachine only add `fruit:time machine = yes` and all other needed settings are automatically added
         * you can also use `fruit:time machine max size = 500G;` to limit max size of time machine volume
 
+* __LDAP\_ENABLE__
+    * _optional_
+    * default not set - set to any value to enable LDAP authentication support
+    * when enabled, Samba uses LDAP as its passdb backend for user authentication
+    * requires `SAMBA_GLOBAL_CONFIG_passdb_SPACE_backend` to be set to `ldapsam:ldap://your-ldap-server`
+    * automatically configures LDAP admin credentials in Samba's secrets database on every container start
+    * supports password rotation - restart container with new `LDAP_ADMIN_PASSWORD` to update credentials
+    * **Cannot be used with Active Directory** - container will exit with error code 7 if both LDAP and AD are enabled
+
+* __LDAP\_ADMIN\_PASSWORD__
+    * _required when LDAP\_ENABLE is set_
+    * password for the LDAP admin DN configured in your smb.conf
+    * stored securely in Samba's `/var/lib/samba/private/secrets.tdb` database
+    * used by Samba to bind to LDAP server and query user/group information
+    * **Security Best Practice:** Use Docker secrets or secure environment injection instead of plaintext in compose files
+
+#### LDAP Configuration Example
+
+To use LDAP authentication with Samba:
+
+```yaml
+services:
+  samba:
+    image: ghcr.io/servercontainers/samba
+    environment:
+      # Enable LDAP support
+      LDAP_ENABLE: "true"
+      LDAP_ADMIN_PASSWORD: "your-ldap-admin-password"
+
+      # Configure Samba to use LDAP passdb backend
+      SAMBA_GLOBAL_CONFIG_passdb_SPACE_backend: "ldapsam:ldap://ldap.example.com"
+      SAMBA_GLOBAL_CONFIG_ldap_SPACE_admin_SPACE_dn: "cn=admin,dc=example,dc=com"
+      SAMBA_GLOBAL_CONFIG_ldap_SPACE_suffix: "dc=example,dc=com"
+      SAMBA_GLOBAL_CONFIG_ldap_SPACE_ssl: "start_tls"
+
+      # Other Samba configuration
+      SAMBA_CONF_WORKGROUP: "WORKGROUP"
+      SAMBA_CONF_SERVER_STRING: "Samba with LDAP"
+
+      # Define shares (users come from LDAP, not ACCOUNT_* variables)
+      SAMBA_VOLUME_CONFIG_shared: "[Shared]; path=/shares/data; guest ok = no; read only = no; browseable = yes"
+
+    volumes:
+      - ./shares/data:/shares/data
+      - samba-data:/var/lib/samba
+    ports:
+      - "445:445"
+
+volumes:
+  samba-data:
+```
+
+**Important Notes:**
+- Do NOT use `ACCOUNT_*` variables when using LDAP - users are managed in your LDAP directory
+- The LDAP server must be accessible from the container
+- LDAP admin password is configured on every container start (supports password rotation and self-healing)
+- Password rotation: Change `LDAP_ADMIN_PASSWORD` environment variable and restart the container
+- **LDAP and Active Directory are mutually exclusive** - you cannot enable both simultaneously
+
+**Using Docker Secrets (Recommended):**
+
+```yaml
+services:
+  samba:
+    image: ghcr.io/servercontainers/samba
+    environment:
+      LDAP_ENABLE: "true"
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      # ... rest of LDAP configuration
+    secrets:
+      - ldap_admin_password
+    # Use entrypoint or init script to read /run/secrets/ldap_admin_password
+    # and set LDAP_ADMIN_PASSWORD environment variable
+
+secrets:
+  ldap_admin_password:
+    file: ./secrets/ldap_admin_password.txt
+```
+
 * __WSDD2\_DISABLE__
     * _optional_
     * default not set - set to any value to disable wsdd2 Service
